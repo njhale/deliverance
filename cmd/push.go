@@ -17,6 +17,7 @@ import (
 
 type pushOptions struct {
 	configs  []string
+	debug bool
 }
 
 var pushOpts pushOptions
@@ -52,7 +53,10 @@ to quickly create a Cobra application.`,
 		}
 		dir := args[0]
 		host := args[1]
-		logrus.SetLevel(logrus.DebugLevel)
+
+		if pushOpts.debug {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
 		resolver := newResolver(pushOpts.configs...)
 
 		return bundle.PushDir(ctx, resolver, host, dir)
@@ -62,4 +66,5 @@ to quickly create a Cobra application.`,
 func init() {
 	rootCmd.AddCommand(pushCmd)
 	pushCmd.Flags().StringArrayVarP(&pushOpts.configs, "config", "c", []string{"~/.docker/config.json"}, "auth config path")
+	pushCmd.Flags().BoolVarP(&pushOpts.debug, "debug", "d", false, "enable debug logging")
 }

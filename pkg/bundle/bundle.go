@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,7 +16,9 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	orascontent "github.com/deislabs/oras/pkg/content"
+	"github.com/deislabs/oras/pkg/oras"
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 )
@@ -23,6 +26,25 @@ import (
 type Blob struct {
 	MediaType string
 	Content   []byte
+}
+
+// Manifest replaces ocispec.Manifest, which does not contain MediaType
+// docker complains about missing mediatype if you give non-oci mediatypes
+type Manifest struct {
+	specs.Versioned
+	images.Image
+
+	MediaType string `json:"mediaType"`
+
+	// Config references a configuration object for a container, by digest.
+	// The referenced configuration object is a JSON blob that the runtime uses to set up the container.
+	Config ocispec.Descriptor `json:"config"`
+
+	// Layers is an indexed list of layers referenced by the manifest.
+	Layers []ocispec.Descriptor `json:"layers"`
+
+	// Annotations contains arbitrary metadata for the image manifest.
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) error {
@@ -34,10 +56,49 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 		return err
 	}
 
-	pushContents = append(pushContents, memoryStore.Add("manifests", string(blob.MediaType), blob.Content))
+	pushContents = append(pushContents, memoryStore.Add("manifests", blob.MediaType, blob.Content))
+
+	// Config
+	imgconfig := ocispec.Image{
+		RootFS: ocispec.RootFS{
+			Type:    "layers",
+			DiffIDs: []digest.Digest{hash},
+		},
+	}
+	configBytes, err := json.Marshal(imgconfig)
+	if err != nil {
+		return err
+	}
+	config := ocispec.Descriptor{
+		MediaType: images.MediaTypeDockerSchema2Config,
+		Digest:    digest.FromBytes(configBytes),
+		Size:      int64(len(configBytes)),
+	}
+	memoryStore.Set(config, configBytes)
+
+	// Manifest
+	manifest := Manifest{
+		Versioned: specs.Versioned{
+			SchemaVersion: 2, // historical value. does not pertain to OCI or docker version
+		},
+		MediaType: images.MediaTypeDockerSchema2Manifest,
+		Config:    config,
+		Layers:    pushContents,
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	manifestDescriptor := ocispec.Descriptor{
+		MediaType: images.MediaTypeDockerSchema2Manifest,
+		Digest:    digest.FromBytes(manifestBytes),
+		Size:      int64(len(manifestBytes)),
+	}
+	memoryStore.Set(manifestDescriptor, manifestBytes)
 
 	fmt.Printf("Pushing to %s...\n", ref)
-	desc, err := PushManifest(ctx, resolver, ref, memoryStore, pushContents, []digest.Digest{hash})
+
+	desc, err := oras.Push(ctx,resolver, ref, memoryStore, pushContents, oras.WithConfig(config), oras.WithManifest(manifestDescriptor))
 	if err != nil {
 		return err
 	}
@@ -45,6 +106,7 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 	fmt.Printf("Pushed  with digest %s\n", desc.Digest)
 	return nil
 }
+
 
 func DirLayerBlobReader(path string) (*Blob, digest.Digest, error) {
 	if _, err := os.Stat(path); err != nil {
