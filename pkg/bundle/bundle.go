@@ -18,47 +18,25 @@ import (
 	orascontent "github.com/deislabs/oras/pkg/content"
 	"github.com/deislabs/oras/pkg/oras"
 	"github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 )
 
-type Blob struct {
-	MediaType string
-	Content   []byte
-}
-
-// Manifest replaces ocispec.Manifest, which does not contain MediaType
-// docker complains about missing mediatype if you give non-oci mediatypes
-type Manifest struct {
-	specs.Versioned
-	images.Image
-
-	MediaType string `json:"mediaType"`
-
-	// Config references a configuration object for a container, by digest.
-	// The referenced configuration object is a JSON blob that the runtime uses to set up the container.
-	Config ocispec.Descriptor `json:"config"`
-
-	// Layers is an indexed list of layers referenced by the manifest.
-	Layers []ocispec.Descriptor `json:"layers"`
-
-	// Annotations contains arbitrary metadata for the image manifest.
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
+// PushDir creates a v2-2 image with a single layer that contains the contents
+// of a single directory
 func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) error {
 	memoryStore := orascontent.NewMemoryStore()
-	pushContents := []ocispec.Descriptor{}
+	layers := []ocispec.Descriptor{}
 
-	blob, hash, err := DirLayerBlobReader(dir)
+	blob, hash, err := BuildLayer(dir)
 	if err != nil {
 		return err
 	}
 
-	pushContents = append(pushContents, memoryStore.Add("manifests", blob.MediaType, blob.Content))
+	layers = append(layers, memoryStore.Add("manifests", images.MediaTypeDockerSchema2LayerGzip, blob))
 
-	// Config
+	// Config Descriptor describes the content
+	// Inlcudes DiffIDs for docker compatibility
 	imgconfig := ocispec.Image{
 		RootFS: ocispec.RootFS{
 			Type:    "layers",
@@ -76,15 +54,19 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 	}
 	memoryStore.Set(config, configBytes)
 
-	// Manifest
-	manifest := Manifest{
-		Versioned: specs.Versioned{
-			SchemaVersion: 2, // historical value. does not pertain to OCI or docker version
-		},
-		MediaType: images.MediaTypeDockerSchema2Manifest,
-		Config:    config,
-		Layers:    pushContents,
+	// Manifest describes the layers
+	manifest := struct {
+		SchemaVersion int                  `json:"schemaVersion"`
+		MediaType     string               `json:"mediaType"`
+		Config        ocispec.Descriptor   `json:"config"`
+		Layers        []ocispec.Descriptor `json:"layers"`
+	}{
+		SchemaVersion: 2,
+		MediaType:     images.MediaTypeDockerSchema2Manifest,
+		Config:        config,
+		Layers:        layers,
 	}
+
 	manifestBytes, err := json.Marshal(manifest)
 	if err != nil {
 		return err
@@ -98,7 +80,7 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 
 	fmt.Printf("Pushing to %s...\n", ref)
 
-	desc, err := oras.Push(ctx,resolver, ref, memoryStore, pushContents, oras.WithConfig(config), oras.WithManifest(manifestDescriptor))
+	desc, err := oras.Push(ctx, resolver, ref, memoryStore, layers, oras.WithConfig(config), oras.WithManifest(manifestDescriptor))
 	if err != nil {
 		return err
 	}
@@ -107,26 +89,15 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 	return nil
 }
 
-
-func DirLayerBlobReader(path string) (*Blob, digest.Digest, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, "", fmt.Errorf("Unable to tar files - %v", err.Error())
-	}
-
-	b, d, err := BuildLayer(path)
-	if err != nil {
+// BuildLayer builds a single tgz image layer from a directory of files
+// returns the gzip data in a byte buffer and the digest of the uncompressed files
+func BuildLayer(directory string) ([]byte, digest.Digest, error) {
+	if _, err := os.Stat(directory); err != nil {
 		return nil, "", err
 	}
 
-	return &Blob{
-		MediaType: images.MediaTypeDockerSchema2LayerGzip,
-		Content: b,
-	}, d, nil
-}
-
-func BuildLayer(directory string) ([]byte, digest.Digest, error) {
-
-	// set up our layer pipline
+	// set up our layer pipeline
+	//
 	//                  -> gz -> byte buffer
 	//                /
 	// files -> tar -
@@ -134,9 +105,9 @@ func BuildLayer(directory string) ([]byte, digest.Digest, error) {
 	//                  -> sha256 -> digest
 	//
 
-	// the byte buffer contains layer data,
+	// the byte buffer contains compressed layer data,
 	// and the hash is the digest of the uncompressed layer
-	// data, which docker needs (oci does not)
+	// data, which docker requires (oci does not)
 
 	// output writers
 	hash := sha256.New()
