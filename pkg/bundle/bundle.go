@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
@@ -35,12 +36,24 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 
 	layers = append(layers, memoryStore.Add("manifests", images.MediaTypeDockerSchema2LayerGzip, blob))
 
+	now := time.Now()
 	// Config Descriptor describes the content
-	// Inlcudes DiffIDs for docker compatibility
+	// Includes DiffIDs for docker compatibility
 	imgconfig := ocispec.Image{
+		// Not required
+		OS: "linux",
+		// Not required
+		Architecture: "amd64",
+		// Required by docker/distribution registries
 		RootFS: ocispec.RootFS{
 			Type:    "layers",
 			DiffIDs: []digest.Digest{hash},
+		},
+		// Required by quay
+		History: []ocispec.History{
+			{
+				Created: &now,
+			},
 		},
 	}
 	configBytes, err := json.Marshal(imgconfig)

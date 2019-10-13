@@ -17,17 +17,26 @@ import (
 
 type pushOptions struct {
 	configs  []string
+	username string
+	password string
 	debug bool
 }
 
 var pushOpts pushOptions
 
-func newResolver(configs ...string) remotes.Resolver {
-	client, err := auth.NewClient(configs...)
+func newResolver(username, password string, configs ...string) remotes.Resolver {
+	if username != "" || password != "" {
+		return docker.NewResolver(docker.ResolverOptions{
+			Credentials: func(hostName string) (string, string, error) {
+				return username, password, nil
+			},
+		})
+	}
+	cli, err := auth.NewClient(configs...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: Error loading auth file: %v\n", err)
 	}
-	resolver, err := client.Resolver(context.Background())
+	resolver, err := cli.Resolver(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: Error loading resolver: %v\n", err)
 		resolver = docker.NewResolver(docker.ResolverOptions{})
@@ -57,7 +66,7 @@ to quickly create a Cobra application.`,
 		if pushOpts.debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
-		resolver := newResolver(pushOpts.configs...)
+		resolver := newResolver(pushOpts.username, pushOpts.password, pushOpts.configs...)
 
 		return bundle.PushDir(ctx, resolver, host, dir)
 	},
@@ -66,5 +75,7 @@ to quickly create a Cobra application.`,
 func init() {
 	rootCmd.AddCommand(pushCmd)
 	pushCmd.Flags().StringArrayVarP(&pushOpts.configs, "config", "c", []string{"~/.docker/config.json"}, "auth config path")
+	pushCmd.Flags().StringVarP(&pushOpts.username, "username", "u", "", "username")
+	pushCmd.Flags().StringVarP(&pushOpts.password, "password", "p", "", "password")
 	pushCmd.Flags().BoolVarP(&pushOpts.debug, "debug", "d", false, "enable debug logging")
 }

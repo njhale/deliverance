@@ -83,29 +83,30 @@ func pack(provider content.Provider, descriptors []ocispec.Descriptor, opts *pus
 	}
 
 	// Manifest
-	var manifestDescriptor ocispec.Descriptor
-	if opts.manifest == nil {
-		manifest := ocispec.Manifest{
-			Versioned: specs.Versioned{
-				SchemaVersion: 2, // historical value. does not pertain to OCI or docker version
-			},
-			Config:      config,
-			Layers:      descriptors,
-			Annotations: opts.manifestAnnotations,
-		}
-		manifestBytes, err := json.Marshal(manifest)
-		if err != nil {
-			return ocispec.Descriptor{}, nil, err
-		}
-		manifestDescriptor = ocispec.Descriptor{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Digest:    digest.FromBytes(manifestBytes),
-			Size:      int64(len(manifestBytes)),
-		}
-		store.Set(manifestDescriptor, manifestBytes)
-	} else {
-		manifestDescriptor = *opts.manifest
+	if opts.manifest != nil {
+		return *opts.manifest, store, nil
 	}
+
+	manifest := ocispec.Manifest{
+		Versioned: specs.Versioned{
+			SchemaVersion: 2, // historical value. does not pertain to OCI or docker version
+		},
+		Config:      config,
+		Layers:      descriptors,
+		Annotations: opts.manifestAnnotations,
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		return ocispec.Descriptor{}, nil, err
+	}
+	manifestDescriptor := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Digest:    digest.FromBytes(manifestBytes),
+		Size:      int64(len(manifestBytes)),
+	}
+	store.Set(manifestDescriptor, manifestBytes)
 
 	return manifestDescriptor, store, nil
 }
+
+

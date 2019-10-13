@@ -1,4 +1,4 @@
 all: build
 
 build:
-	go build .
+	go build -mod=vendor .

@@ -30,7 +30,7 @@ func pushOptsDefaults() *pushOpts {
 // PushOpt allows callers to set options on the oras push
 type PushOpt func(o *pushOpts) error
 
-// WithConfig overrides the config
+// WithConfig overrides the config - setting this will ignore WithConfigMediaType and WithConfigAnnotations
 func WithConfig(config ocispec.Descriptor) PushOpt {
 	return func(o *pushOpts) error {
 		o.config = &config
@@ -54,7 +54,7 @@ func WithConfigAnnotations(annotations map[string]string) PushOpt {
 	}
 }
 
-// WithManifest overrides the manifest
+// WithManifest overrides the manifest - setting this will ignore WithManifestConfigAnnotations
 func WithManifest(manifest ocispec.Descriptor) PushOpt {
 	return func(o *pushOpts) error {
 		o.manifest = &manifest

@@ -18,7 +18,8 @@ require (
 )
 
 replace (
-	github.com/deislabs/oras v0.7.0 => ../oras
+	github.com/containerd/containerd v1.3.0 => github.com/ecordell/containerd v1.3.0-2019101315463-50de66204385
+	github.com/deislabs/oras v0.7.0 => github.com/ecordell/oras v0.7.0-a41d6a971027c563d5c356d9127fe13c81d65fb3
 	github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309
 	rsc.io/letsencrypt => github.com/dmcgowan/letsencrypt v0.0.0-20160928181947-1847a81d2087
 )
