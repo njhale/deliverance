@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
-	orascontent "github.com/deislabs/oras/pkg/content"
-	"github.com/deislabs/oras/pkg/oras"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
@@ -26,15 +26,39 @@ import (
 // PushDir creates a v2-2 image with a single layer that contains the contents
 // of a single directory
 func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) error {
-	memoryStore := orascontent.NewMemoryStore()
-	layers := []ocispec.Descriptor{}
 
+	// TODO: could be a long-lived local file store instead of a new tmpdir every time
+	tmpdir, err := ioutil.TempDir("", "bndlr-")
+	if err != nil {
+		return err
+	}
+
+	store, err := local.NewStore(tmpdir)
+	if err != nil {
+		return err
+	}
+	writer, err := store.Writer(ctx, content.WithRef(ref))
+	if err != nil {
+		return err
+	}
+
+	layers := []ocispec.Descriptor{}
 	blob, hash, err := BuildLayer(dir)
 	if err != nil {
 		return err
 	}
 
-	layers = append(layers, memoryStore.Add("manifests", images.MediaTypeDockerSchema2LayerGzip, blob))
+	// write the layers
+	layerSize, err := writer.Write(blob)
+	if err != nil {
+		return err
+	}
+	if err := writer.Commit(ctx, int64(layerSize), digest.FromBytes(blob)); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
 
 	now := time.Now()
 	// Config Descriptor describes the content
@@ -65,7 +89,22 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 		Digest:    digest.FromBytes(configBytes),
 		Size:      int64(len(configBytes)),
 	}
-	memoryStore.Set(config, configBytes)
+
+	writer, err = store.Writer(ctx, content.WithRef(ref))
+	if err != nil {
+		return err
+	}
+	// write the config
+	_, err = writer.Write(configBytes)
+	if err != nil {
+		return err
+	}
+	if err := writer.Commit(ctx, int64(len(configBytes)), config.Digest); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
 
 	// Manifest describes the layers
 	manifest := struct {
@@ -89,16 +128,34 @@ func PushDir(ctx context.Context, resolver remotes.Resolver, ref, dir string) er
 		Digest:    digest.FromBytes(manifestBytes),
 		Size:      int64(len(manifestBytes)),
 	}
-	memoryStore.Set(manifestDescriptor, manifestBytes)
+	// write the manifest
+	writer, err = store.Writer(ctx, content.WithRef(ref))
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(manifestBytes)
+	if err != nil {
+		return err
+	}
+	if err := writer.Commit(ctx, int64(len(manifestBytes)), manifestDescriptor.Digest); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
 
 	fmt.Printf("Pushing to %s...\n", ref)
 
-	desc, err := oras.Push(ctx, resolver, ref, memoryStore, layers, oras.WithConfig(config), oras.WithManifest(manifestDescriptor))
+	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Pushed  with digest %s\n", desc.Digest)
+	if err := remotes.PushContent(ctx, pusher, manifestDescriptor, store, nil, nil); err != nil {
+		return err
+	}
+
+	fmt.Printf("Pushed  with digest %s\n", manifestDescriptor.Digest)
 	return nil
 }
 
