@@ -22,7 +22,7 @@ github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/osversion
 # github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
 github.com/beorn7/perks/quantile
-# github.com/containerd/containerd v1.3.0
+# github.com/containerd/containerd v1.3.1-0.20191014151319-9c86b8f5ed49
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/content
 github.com/containerd/containerd/content/local
@@ -40,7 +40,7 @@ github.com/containerd/containerd/sys
 github.com/containerd/containerd/version
 # github.com/containerd/continuity v0.0.0-20181203112020-004b46473808
 github.com/containerd/continuity/pathdriver
-# github.com/deislabs/oras v0.7.0 => ../oras
+# github.com/deislabs/oras v0.7.1-0.20191014162205-205efe3f40d5
 github.com/deislabs/oras/pkg/artifact
 github.com/deislabs/oras/pkg/auth
 github.com/deislabs/oras/pkg/auth/docker
@@ -101,7 +101,7 @@ github.com/docker/go-connections/tlsconfig
 github.com/docker/go-metrics
 # github.com/docker/go-units v0.3.3
 github.com/docker/go-units
-# github.com/gogo/protobuf v1.2.1
+# github.com/gogo/protobuf v1.3.0
 github.com/gogo/protobuf/proto
 # github.com/golang/protobuf v1.3.1
 github.com/golang/protobuf/proto

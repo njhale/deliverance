@@ -108,5 +108,3 @@ func pack(provider content.Provider, descriptors []ocispec.Descriptor, opts *pus
 
 	return manifestDescriptor, store, nil
 }
-
-

@@ -3,8 +3,11 @@ module github.com/ecordell/bndlr
 go 1.12
 
 require (
-	github.com/containerd/containerd v1.3.0
-	github.com/deislabs/oras v0.7.0
+	// contains a fix for talking to quay - next semver release should be used when released
+	github.com/containerd/containerd v1.3.1-0.20191014151319-9c86b8f5ed49
+	// contains a fix for overriding manifestdescriptor - next semver release should be used when released
+	github.com/deislabs/oras v0.7.1-0.20191014162205-205efe3f40d5
+	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/opencontainers/image-spec v1.0.1
@@ -18,8 +21,6 @@ require (
 )
 
 replace (
-	github.com/containerd/containerd v1.3.0 => github.com/ecordell/containerd v1.3.0-2019101315463-50de66204385
-	github.com/deislabs/oras v0.7.0 => github.com/ecordell/oras v0.7.0-a41d6a971027c563d5c356d9127fe13c81d65fb3
 	github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309
 	rsc.io/letsencrypt => github.com/dmcgowan/letsencrypt v0.0.0-20160928181947-1847a81d2087
 )
