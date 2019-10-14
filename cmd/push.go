@@ -1,48 +1,40 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"os"
 
-	"github.com/containerd/containerd/remotes"
-	"github.com/containerd/containerd/remotes/docker"
-	auth "github.com/deislabs/oras/pkg/auth/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/ecordell/bndlr/pkg/bundle"
+	"github.com/ecordell/bndlr/pkg/registry"
+	"github.com/ecordell/bndlr/pkg/registry/common"
+	"github.com/ecordell/bndlr/pkg/registry/filestore"
+	"github.com/ecordell/bndlr/pkg/registry/memory"
+	"github.com/ecordell/bndlr/pkg/registry/store"
 	"github.com/ecordell/bndlr/pkg/signals"
 )
 
+type StoreType string
+
+const (
+	MemoryStoreType StoreType = "memory"
+	TmpFileStoreType StoreType = "tmp"
+	FileStoreType StoreType = "file"
+)
+
 type pushOptions struct {
+	// auth
 	configs  []string
 	username string
 	password string
+
+	storeType string
+	storeDir string
+
 	debug bool
 }
 
 var pushOpts pushOptions
-
-func newResolver(username, password string, configs ...string) remotes.Resolver {
-	if username != "" || password != "" {
-		return docker.NewResolver(docker.ResolverOptions{
-			Credentials: func(hostName string) (string, string, error) {
-				return username, password, nil
-			},
-		})
-	}
-	cli, err := auth.NewClient(configs...)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: Error loading auth file: %v\n", err)
-	}
-	resolver, err := cli.Resolver(context.Background())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: Error loading resolver: %v\n", err)
-		resolver = docker.NewResolver(docker.ResolverOptions{})
-	}
-	return resolver
-}
 
 // pushCmd represents the push command
 var pushCmd = &cobra.Command{
@@ -61,14 +53,41 @@ to quickly create a Cobra application.`,
 			return fmt.Errorf("should be called with two args: dir host")
 		}
 		dir := args[0]
-		host := args[1]
+		ref := args[1]
 
 		if pushOpts.debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
-		resolver := newResolver(pushOpts.username, pushOpts.password, pushOpts.configs...)
 
-		return bundle.PushDir(ctx, resolver, host, dir)
+		resolver := registry.NewResolver(pushOpts.username, pushOpts.password, pushOpts.configs...)
+		var store store.Store
+		var err error
+		if pushOpts.storeType == string(MemoryStoreType) {
+			store = memory.NewMemoryStore()
+		} else if pushOpts.storeType == string(TmpFileStoreType) {
+			store, err = filestore.NewTmpFileStore()
+			if err != nil {
+				return err
+			}
+		} else if pushOpts.storeType == string(FileStoreType) {
+			if pushOpts.storeDir == "" {
+				return fmt.Errorf("must specify --storagePath when using storage type file")
+			}
+			store, err = filestore.NewFileStore(pushOpts.storeDir)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("store type %s not supported", pushOpts.storeType)
+		}
+
+		digest, err := common.BuildAndPushDirectoryV22(ctx, ref, store, resolver, dir)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("pushed with digest %s\n", digest.String())
+		return nil
 	},
 }
 
@@ -78,4 +97,6 @@ func init() {
 	pushCmd.Flags().StringVarP(&pushOpts.username, "username", "u", "", "username")
 	pushCmd.Flags().StringVarP(&pushOpts.password, "password", "p", "", "password")
 	pushCmd.Flags().BoolVarP(&pushOpts.debug, "debug", "d", false, "enable debug logging")
+	pushCmd.Flags().StringVarP(&pushOpts.storeType, "storage", "s", string(TmpFileStoreType), "configure storage. Options: memory, tmp, file" )
+	pushCmd.Flags().StringVar(&pushOpts.storeDir, "storagePath",  "", "configure storage location. only valid for storage type file" )
 }
