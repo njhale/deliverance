@@ -1,4 +1,4 @@
-# dlvr 
+# deliverance
 
 WARNING: proof of concept, not for general consumption
 
