@@ -6,13 +6,13 @@ WARNING: proof of concept, not for general consumption
 
 ```sh
 # install
-$ go get github.com/ecordell/bndlr
+$ go get github.com/ecordell/deliverance
 
 # start a registry
 $ docker run -it --rm -p 5000:5000 registry
 
 # push manifests
-$ /bndlr push ./manifests localhost:5000/ecordell/testbndlr:test
+$ dlvr push ./manifests localhost:5000/ecordell/testbndlr:test
   Pushing to localhost:5000/ecordell/testbndlr:test...
   Uploading d213f9ccc4e4 manifests
   DEBU[0000] push                                          digest="sha256:d213f9ccc4e47682afb20622d9ad6dc91a6207252cd262c4983947c48beaddef" mediatype=application/vnd.docker.image.rootfs.diff.tar.gzip size=8308
