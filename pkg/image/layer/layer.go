@@ -142,8 +142,45 @@ func LayerFromDirectory(directory string, opts ...LayerOption) (*Layer, error) {
 		return nil, err
 	}
 	l := &Layer{
-		Blob: b,
+		Blob:   b,
 		Digest: digest.NewDigestFromBytes(digest.SHA256, hash.Sum(nil)),
 	}
 	return l.apply(opts), nil
+}
+
+// LayerToDirectory unpacks the content of a layer to a directory.
+func LayerToDirectory(directory string, layer *Layer) error {
+	gzipReader, err := gzip.NewReader(bytes.NewReader(layer.Blob))
+	if err != nil {
+		return err
+	}
+	reader := tar.NewReader(gzipReader)
+
+	var h *tar.Header
+	for {
+		var err error
+		if h, err = reader.Next(); err == io.EOF {
+			break
+		}
+
+		var (
+			info = h.FileInfo()
+			path = filepath.Join(directory, info.Name())
+		)
+		switch h.Typeflag {
+		case tar.TypeDir:
+			if err = os.MkdirAll(path, info.Mode().Perm()); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			data := make([]byte, info.Size())
+			if _, err = reader.Read(data); err != nil && err != io.EOF {
+				return err
+			}
+
+			ioutil.WriteFile(path, data, info.Mode().Perm())
+		}
+	}
+
+	return nil
 }

@@ -18,3 +18,14 @@ type Store interface {
 	// fetching the blobs to push requires knowledge of the backing store, which is why this method is on the Store
 	Push(ctx context.Context, resolver remotes.Resolver, ref string, image *image.Descriptor) (*digest.Digest, error)
 }
+
+type Puller interface {
+	// Pull fetches the set of layer descriptors belonging to the given reference.
+	Pull(ctx context.Context, resolver remotes.Resolver, ref string) (*image.Descriptor, error)
+}
+
+type Unpacker interface {
+	// Unpack applies the layers of an image to a directory.
+	// The image must first be pulled to the underlying store before unpacking.
+	Unpack(ctx context.Context, img *image.Descriptor, dir string) error
+}
